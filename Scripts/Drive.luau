@@ -710,19 +710,30 @@ local function Steering(dt: number)
 	_CSAmt = 0
 	
 	if _CS and speed > _Tune.CSSpeedThresh then
-		local localVel = _Center:VectorToObjectSpace(_Velocity)
-		local sideRatio = localVel.X / math.max(_Velocity.Magnitude, 0.001)
-		local desiredCS = math.clamp(sideRatio, -1, 1) * (_Tune.CSAmt / 100)
+		local sideRatio = _Center:VectorToObjectSpace(_Velocity).X / math.max(_Velocity.Magnitude, 0.001)
+		local csSideDeadzone = 0.02
+		if math.abs(sideRatio) < csSideDeadzone then
+			sideRatio = 0
+		end
 		
+		local desiredCS = math.clamp(sideRatio, -1, 1) * (_Tune.CSAmt / 100)
 		local steerLimit = math.max(_Tune.CSSteerThresh / 100, 0.001)
 		local inputFade = 1 - math.clamp(math.abs(input) / steerLimit, 0, 1)
 		
 		_CSAmt = desiredCS * inputFade
+		
+		if math.abs(_CSAmt) <= ((_Tune.CSAmt / 100) * 0.01) then
+			_CSAmt = 0
+		end
 	end
 	
-	_CSActive = math.abs(_CSAmt) > (_Tune.CSAmt / 100) * 0.01
+	_CSActive = _CSAmt ~= 0
 	
 	local target = math.clamp(input + _CSAmt, -1, 1)
+	if math.abs(target) < 0.001 then
+		target = 0
+	end
+	
 	local returning = math.abs(target) < math.abs(_GSteerC) or target * _GSteerC < 0
 	local steerTime = returning and _Tune.ReturnTime or _Tune.SteerTime
 	local step = dt / math.max(steerTime, 0.001)
