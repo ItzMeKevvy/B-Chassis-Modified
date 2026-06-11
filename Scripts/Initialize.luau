@@ -25,40 +25,16 @@ local function MakeWeldConstraint(x, y)
 	return W
 end
 
-local function MakeWeld(x, y, type, s) 
-	if type==nil then type="Weld" end
-	if type == "Weld" then
-		return MakeWeldConstraint(x, y)
+local function ModelWeld(model: Instance, target: BasePart)
+	if model:IsA("BasePart") then 
+		MakeWeldConstraint(target, model) 
 	end
-	local W=Instance.new(type) 
-	W.Part0=x W.Part1=y 
-	W.C0=x.CFrame:inverse()*x.CFrame 
-	W.C1=y.CFrame:inverse()*x.CFrame 
-	W.Parent = x
-	if type=="Motor" and s~=nil then 
-		W.MaxVelocity=s 
-	end 
-	return W	
-end
 
-local function ModelWeld(a, b) 
-	if a:IsA("BasePart") then 
-		MakeWeld(b, a) 
-	end 
-	for _, v in a:GetDescendants() do
-		if v:IsA("BasePart") then
-			MakeWeld(v, b)
+	for i, part in model:GetDescendants() do
+		if part:IsA("BasePart") then
+			MakeWeldConstraint(part, target)
 		end
 	end
-end
-
-local function Unanchor(a) 
-	if a:IsA("BasePart") then a.Anchored=false end 
-	for i, v in (a:GetDescendants()) do 
-		if v:IsA("BasePart") then
-			v.Anchored = false 
-		end
-	end 
 end
 
 --[[Initialize]]
@@ -89,25 +65,33 @@ for i, descendant in car:GetDescendants() do
 end
 
 --[[Wheel Configuration]]
-local function GetCarCenter()
+local function GetCarCenter(dist: number ?): CFrame
+	dist = dist or 0.5
+	
 	local centerF = Vector3.new()
 	local centerR = Vector3.new()
 	local countF = 0
 	local countR = 0
-	for i,v in Wheels do
-		if not v:IsA("BasePart") then continue end
-		if v.Name=="FL" or v.Name=="FR" or v.Name=="F" then
-			centerF = centerF+v.CFrame.p
-			countF = countF+1
+	
+	for i, v in Wheels do
+		if not v:IsA("BasePart") then 
+			continue 
+		end
+		
+		if v.Name == "FL" or v.Name == "FR" or v.Name == "F" then
+			centerF += v.Position
+			countF += 1
 		else
-			centerR = centerR+v.CFrame.p
-			countR = countR+1
+			centerR += v.Position
+			countR += 1
 		end
 	end
-	centerF = centerF/countF
-	centerR = centerR/countR
-	local center = CFrame.lookAt(centerR:Lerp(centerF,.5),centerF)
-	return center
+	
+	centerF /= countF
+	centerR /= countR
+	
+	local pos = centerR:Lerp(centerF, dist)
+	return CFrame.lookAt(pos, pos + centerF - centerR)
 end
 
 --PGS/Legacy
@@ -194,7 +178,7 @@ for _, v in Drive do
 	axlep.Name = 'AxleP'
 	axlep.CFrame = v.CFrame
 	axlep.Parent = v
-	MakeWeld(axlep, axle)
+	MakeWeldConstraint(axlep, axle)
 
 	--Create Suspension
 	local SuspensionGeometry = v:FindFirstChild("SuspensionGeometry")
@@ -215,10 +199,10 @@ for _, v in Drive do
 			end
 		end
 		
-		MakeWeld(SuspensionGeometry.Hub, base)
+		MakeWeldConstraint(SuspensionGeometry.Hub, base)
 		
 		if SuspensionGeometry:FindFirstChild("SpringTop") then
-			MakeWeld(SuspensionGeometry.SpringTop, car.DriveSeat)
+			MakeWeldConstraint(SuspensionGeometry.SpringTop, car.DriveSeat)
 		end
 		
 		local spring = SuspensionGeometry:FindFirstChild("Spring")
@@ -241,17 +225,17 @@ for _, v in Drive do
 		if SuspensionGeometry then
 			SuspensionGeometry:ClearAllChildren()
 		end
-		MakeWeld(car.DriveSeat, base)
+		MakeWeldConstraint(car.DriveSeat, base)
 	end
 	
 	--Lock Rear Steering Axle
 	if (Tune.FWSteer=='Static' or Tune.FWSteer=='Speed' or Tune.FWSteer=='Both') == false then
 		if v.Name == "RL" or v.Name == "RR" or v.Name=="R" then
-			MakeWeld(base, axle)
+			MakeWeldConstraint(base, axle)
 		end
 	end
 
-	MakeWeld(arm, axle)
+	MakeWeldConstraint(arm, axle)
 
 	--Weld Miscelaneous Parts
 	if v:FindFirstChild("SuspensionFixed")~=nil then
@@ -384,26 +368,7 @@ end
 getMass(car)
 
 --Apply Vehicle Weight
-if mass*Units.Mass_kg < Tune.Weight*0.453592 then
-	--Calculate Weight Distribution
-	local centerF = Vector3.new()
-	local centerR = Vector3.new()
-	local countF = 0
-	local countR = 0
-
-	for i, v in (Drive) do
-		if v.Name=="FL" or v.Name=="FR" or v.Name=="F" then
-			centerF = centerF+v.CFrame.p
-			countF = countF+1
-		else
-			centerR = centerR+v.CFrame.p
-			countR = countR+1
-		end
-	end
-	centerF = centerF/countF
-	centerR = centerR/countR
-	local center = centerR:Lerp(centerF, Tune.WeightDist/100) 
-
+if mass * Units.Mass_kg < Tune.Weight * 0.453592 then
 	--Create Weight Brick
 	local weightB = Instance.new("Part")
 	weightB.Name = "#Weight"
@@ -412,19 +377,14 @@ if mass*Units.Mass_kg < Tune.Weight*0.453592 then
 	weightB.BrickColor = BrickColor.new("Really black")
 	weightB.TopSurface = Enum.SurfaceType.Smooth
 	weightB.BottomSurface = Enum.SurfaceType.Smooth
-	if Tune.WBVisible then
-		weightB.Transparency = .75			
-	else
-		weightB.Transparency = 1			
-	end
+	weightB.Transparency = Tune.WBVisible and 0.75 or 1
 
-	weightB.Size = Vector3.new(Tune.WeightBSize[1], Tune.WeightBSize[2], Tune.WeightBSize[3])/Units.Length_mm
-	local tdensity = (Tune.Weight*Units.Mass_kg - mass)/(weightB.Size.X*weightB.Size.Y*weightB.Size.Z) --fixed by denkodin
+	weightB.Size = Vector3.new(Tune.WeightBSize[1], Tune.WeightBSize[2], Tune.WeightBSize[3]) / Units.Length_mm
+	local tdensity = (Tune.Weight * Units.Mass_kg - mass) / (weightB.Size.X * weightB.Size.Y * weightB.Size.Z) --fixed by denkodin
 	weightB.CustomPhysicalProperties = PhysicalProperties.new(math.clamp(tdensity, 0.01, 100), 0, 0, 0, 0)
-	--Real life mass in pounds, converted to kg minus existing roblox mass converted to kg, divided by volume of the weight brick in cubic meters, divided by the density of water
-	weightB.CFrame = (car.DriveSeat.CFrame-car.DriveSeat.Position+center)*CFrame.new(0, Tune.CGHeight, 0)
+	weightB.CFrame = GetCarCenter(Tune.WeightDist / 100) * CFrame.new(0, Tune.CGHeight, 0)
 	weightB.Parent = car.Body
-
+	
 	--Density Cap
 	if weightB.CustomPhysicalProperties.Density>=100 then
 		warn( "\n\t [A-Chassis ".._BuildVersion.."]: Density too high for specified volume."
@@ -463,11 +423,13 @@ end
 
 -- Flip
 do
+	local weightB = car.Body:WaitForChild("#Weight") :: BasePart
+	
 	local attachment = Instance.new("Attachment")
 	attachment.Name = "FlipAttachment"
-	attachment.Axis = Vector3.new(0, 1, 0)
+	attachment.Axis = car.DriveSeat.CFrame:VectorToObjectSpace(weightB.CFrame.UpVector)
 	attachment.Parent = car.DriveSeat
-
+	
 	local alignOrientation = Instance.new("AlignOrientation")
 	alignOrientation.Name = "Flip"
 	alignOrientation.Enabled = false
@@ -475,27 +437,27 @@ do
 	alignOrientation.AlignType = Enum.AlignType.PrimaryAxisParallel
 	alignOrientation.Mode = Enum.OrientationAlignmentMode.OneAttachment
 	alignOrientation.Attachment0 = attachment
-	alignOrientation.PrimaryAxis = Vector3.new(0, 1, 0)
+	alignOrientation.PrimaryAxis = Vector3.yAxis
 	alignOrientation.Parent = car.DriveSeat
 end
 
 --[[Finalize Chassis]]	
-task.wait()
-
 --Misc Weld
-for i, v in (script:GetChildren()) do
+for i, v in script:GetChildren() do
 	if v:IsA("ModuleScript") then
 		require(v)
 	end
 end
 
 --Weld Body
-task.wait()
 ModelWeld(car.Body, car.DriveSeat)
 
 --Unanchor
-task.wait()
-Unanchor(car)
+for i, v in car:GetDescendants() do
+	if v:IsA("BasePart") then
+		v.Anchored = false
+	end
+end
 
 --[[Manage Plugins]]
 task.wait()
@@ -517,14 +479,6 @@ for i, v in plugins:GetChildren() do
 end
 
 plugins:Destroy()
-
-local function shutdown(player)
-	for _, child in player.PlayerGui:GetChildren() do
-		if child.Name == "A-Chassis Interface" then
-			child:Destroy()
-		end
-	end
-end
 
 --[[Remove Character Weight]]
 
@@ -554,7 +508,7 @@ local function handleCharacter(character, tbl)
 	end
 end
 
---Apply Seat Handler
+-- Apply Seat Handler
 for _, data in Seats do
 	local seatObject = data.Seat :: Seat
 	local parts = data.Parts
@@ -574,8 +528,12 @@ end
 
 --[[Destroying Cleanup]]
 seat.AncestryChanged:Connect(function()
-	if seat.Parent then return end
+	if seat.Parent then 
+		return 
+	end
+	
 	task.wait(10) -- Delay for clients to finish up
+	
 	if car then
 		car:Destroy()
 	end
@@ -587,7 +545,9 @@ end)
 seat.ChildAdded:Connect(function(child: Instance)
 	if child.Name == "SeatWeld" and child:IsA("Weld") then
 		local player = Players:GetPlayerFromCharacter(child.Part1.Parent)
-		if not player then return end
+		if not player then 
+			return 
+		end
 		
 		car.DriveSeat:SetNetworkOwner(player)
 
@@ -599,8 +559,9 @@ end)
 --Driver Leave
 seat.ChildRemoved:Connect(function(child: Instance)
 	if child.Name == "SeatWeld" and child:IsA("Weld") then
-		-- Safety check in case vehicle destroying
-		if not seat.Parent then return end
+		if not seat.Parent then 
+			return 
+		end
 
 		-- Remove Flip Force
 		if seat:FindFirstChild("Flip") then
@@ -633,11 +594,15 @@ seat.ChildRemoved:Connect(function(child: Instance)
 end)
 
 --Driver mental breakdown
-shutdownEvent.OnServerEvent:Connect(function(player)
-	if not player:FindFirstChild("PlayerGui") then return end
-	for _, v in player.PlayerGui:GetChildren() do
-		if v.Name ~= "A-Chassis Interface" then continue end
-		v:Destroy()
+shutdownEvent.OnServerEvent:Connect(function(player: Player)
+	if not player:FindFirstChild("PlayerGui") then 
+		return 
+	end
+	
+	for i, v in player.PlayerGui:GetChildren() do
+		if v.Name == "A-Chassis Interface" then 
+			v:Destroy() 
+		end
 	end
 end)
 
