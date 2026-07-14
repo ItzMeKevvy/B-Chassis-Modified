@@ -308,6 +308,11 @@ for name, data in Wheels do
 	wDRatio = wDia * math.pi / 60
 end
 
+-- Steering lock variables (ItzMeKevvy)
+local lockedSteerAngle = 0
+local maxLockAngle = 0.5
+local isSteeringLocked = false
+
 -- Shutdown
 driveSeat.ChildRemoved:Connect(function(child: Instance) 
 	if child.Name=="SeatWeld" and child:IsA("Weld") then
@@ -387,7 +392,21 @@ end
 -- Steering
 local function Steering(dt: number)
 	local speed = _Velocity.Magnitude * (Units.Length_mm / 1000) * 3.6
-	
+
+	-- Steering Lock Logic (ItzMeKevvy)
+	if not _IsOn then
+		if not isSteeringLocked then
+			if math.abs(_GSteerC) >= maxLockAngle then
+				lockedSteerAngle = _GSteerC
+				isSteeringLocked = true
+			end
+		else
+			_GSteerT = lockedSteerAngle
+		end
+	else
+		lockedSteerAngle = 0
+		isSteeringLocked = false
+	end
 	-- Steering Input
 	local input = math.clamp(_GSteerT, -1, 1)
 	if math.abs(input) > _Tune.SteerDeadzone then
@@ -395,39 +414,52 @@ local function Steering(dt: number)
 	else
 		input = 0
 	end
-	
+
 	-- Counter Steering
 	_CSAmt = 0
-	
-	if _CS and speed > _Tune.CSSpeedThresh then
+
+	if _CS and speed  > _Tune.CSSpeedThresh then
 		local sideRatio = _Center:VectorToObjectSpace(_Velocity).X / math.max(_Velocity.Magnitude, 0.001)
 		local csSideDeadzone = 0.02
 		if math.abs(sideRatio) < csSideDeadzone then
 			sideRatio = 0
 		end
-		
+
 		local desiredCS = math.clamp(sideRatio, -1, 1) * (_Tune.CSAmt / 100)
 		local steerLimit = math.max(_Tune.CSSteerThresh / 100, 0.001)
 		local inputFade = 1 - math.clamp(math.abs(input) / steerLimit, 0, 1)
-		
+
 		_CSAmt = desiredCS * inputFade
-		
+
 		if math.abs(_CSAmt) <= ((_Tune.CSAmt / 100) * 0.01) then
 			_CSAmt = 0
 		end
 	end
-	
+
 	_CSActive = _CSAmt ~= 0
-	
+
 	local target = math.clamp(input + _CSAmt, -1, 1)
 	if math.abs(target) < 0.001 then
 		target = 0
 	end
-	
+
+	-- Speed based auto centering (ItzMeKevvy)
 	local returning = math.abs(target) < math.abs(_GSteerC) or target * _GSteerC < 0
-	local steerTime = returning and _Tune.ReturnTime or _Tune.SteerTime
-	_GSteerC = MoveToward(_GSteerC, target, StepForTime(dt, steerTime))
-	
+	if math.abs(target) > 0.01 then
+		local steerTime = returning and _Tune.ReturnTime or _Tune.SteerTime
+		_GSteerC = MoveToward(_GSteerC, target, StepForTime(dt, steerTime))
+	else
+		if speed > _Tune.CSSpeedThresh then
+			local returnStep = StepForTime(dt, _Tune.ReturnTime)
+			if _GSteerC > 0 then
+				_GSteerC = math.max(0, _GSteerC - returnStep)
+			elseif _GSteerC < 0 then
+				_GSteerC = math.min(0, _GSteerC + returnStep)
+			end
+		else
+		end
+	end
+
 	-- Four Wheel Steering
 	local rearScale = 0
 	if _Tune.FWSteer ~= "None" then
@@ -440,23 +472,23 @@ local function Steering(dt: number)
 			rearScale = math.clamp(rearSpeed - 1, -1, 1)
 		end
 	end
-	
+
 	-- Apply
-	local angleScale = SampleCurve(_Tune.MaxAngleCurve, speed)
+	local angleScale = SampleCurve(_Tune.MaxAngleCurve, speed )
 	for _, data in Wheels do
 		if data.CanSteer == 0 then
 			continue
 		end
-		
+
 		if data.CanSteer ~= 2 then
 			data.SteerAttach0.Orientation = Vector3.zero
 			continue
 		end
-		
+
 		local maxAngle = data.isFront and _Tune.MaxSteerAngle or _Tune.RMaxSteerAngle
 		local steerScale = data.isFront and 1 or rearScale
 		local steerAngle = _GSteerC * maxAngle * angleScale * steerScale
-		
+
 		data.SteerAttach0.Orientation = Vector3.new(0, steerAngle, 0)
 	end
 end
@@ -1116,7 +1148,6 @@ local function AutoFlip()
 end
 
 -- Inputs
--- If migrating to server authority, ensure to use attributes for inputs to allow prediction
 local VehicleActions = {
 	ThrottleAction = {
 		Step = function(action: InputAction)
