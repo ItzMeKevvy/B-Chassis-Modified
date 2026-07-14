@@ -12,9 +12,10 @@
 local Tune = {}
 
 --[[Misc]]
-	Tune.LoadDelay		= 3			    -- Delay before initializing chassis (in seconds)
+	Tune.LoadDelay		= 0			    -- Delay before initializing chassis (in seconds)
 	Tune.AutoStart		= true		    -- Set to false if using manual ignition plugin
 	Tune.AutoFlip		= true		    -- Set to false if using manual flip plugin
+	Tune.Mobile			= true			-- Set to false if using a 3rd party mobile support method.
 
 --[[Controls]]
 	Tune.CustomInputContextEnabled = false	-- Enables a custom InputContext for vehicle controls
@@ -23,7 +24,7 @@ local Tune = {}
 	-- Example: Tune.CustomInputContexPath = game:GetService("ReplicatedStorage").Inputs.VehicleContext :: InputContext
 	
 	Tune.MouseSteerLimit = 70		-- Mouse distance from center for full steering, in % of half screen width (0 - 100)
-	Tune.MouseSteerDeadzone = 5		-- Mouse distance from center before steering starts, in % of half screen width (0 - 100)
+	Tune.MouseSteerDeadzone = 0		-- Mouse distance from center before steering starts, in % of half screen width (0 - 100)
 	
 --[[Wheel Alignment]]
 	--[Values are in degrees]
@@ -106,7 +107,7 @@ local Tune = {}
 	Tune.CSEnabled			= true		-- Enables or disables countersteering
 	Tune.CSAmt				= 100		-- Amount of countersteering at a full perpendicular slide (in percent)
 	Tune.CSSteerThresh		= 10		-- Steering input where countersteer assist fades out (in percent)
-	Tune.CSSpeedThresh		= 10		-- Minimum vehicle speed before countersteering can activate, (in km/h)
+	Tune.CSSpeedThresh		= 20		-- Minimum vehicle speed before countersteering can activate(in km/h) This also set the minimum speed for auto centering.
 	
 	-- Four Wheel Steering
 	Tune.FWSteer			= "None"	-- Static, Speed, Both, or None
